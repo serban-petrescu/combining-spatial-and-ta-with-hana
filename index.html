@@ -1,0 +1,395 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>Combining spatial and sentiment analysis using SAP HANA</title>
+        <link rel="icon" href="assets/favicon.ico" type="image/x-icon" />
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/msg.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="assets/xcode.css">
+
+		<style>
+			.reveal .playback {
+				bottom: 25px !important
+			}
+		</style>
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<img src="assets/logo.png" class="logo"/>
+		<div class="footnote">msg | April 2018 | sitTSR 2018</div>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+                    <h2>Combining spatial and sentiment analysis</h2>
+                    <h4>using SAP HANA</h4>
+					<p>
+						<small>by <a href="https://serban-petrescu.github.io">Serban Petrescu</a></small>
+					</p>
+                </section>
+                <section>
+                    <h3>About me</h3>
+                    <ul>
+                        <li>Senior IT Consultant @ msg-systems</li>
+                        <li>Lead developer and architect</li>
+                        <li>Worked with ABAP, HANA, UI5, SCP</li>
+                        <li>Really into open source (Spring, Node, React)</li>
+                        <li><a href="http://serban-petrescu.github.io">http://serban-petrescu.github.io</a></li>
+                    </ul>
+                </section>
+                <section>
+                    <section>
+                        <h1>Intro</h1>
+                    </section>
+                    <section>
+                        <p>
+                            Many companies have a large pool of <strong>unstructured feedback</strong> 
+                            from customers (e.g. complaints).
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Most of the time, this data also has <strong>geographical information</strong> 
+                            attached (e.g. the address).
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Using HANA, we can <strong>easily</strong> extract value from all of this data,
+                            helping customers improve their services.
+                        </p>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>The data</h1>
+                    </section>
+                    <section>
+                        <p>
+                            We'll look into some Twitter posts about <strong>#SAP</strong> and analyse
+                            the feedback SAP is receiving.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Initially, I wanted to use the <strong>Twitter API</strong> to pull a 
+                            large amount of tweets and directly feed them to HANA.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Unfortunately, almost all of the tweets about SAP are: job postings, random
+                            advertisements and sharing blog posts or articles about something related.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            The solution: I had to cherry-pick the tweets. In a real-life scenario though,
+                            this problem would be solved through the feedback collection mechanism.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Twitter can also have data about either the location from which the tweet was
+                            made <em>(preferred)</em> or the location of the author <em>(fallback)</em>. 
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/raw_data_excel.PNG"/>
+                    </section>
+                </section>
+				<section>
+                    <section>
+                        <h1>Importing data</h1>
+                    </section>
+                    <section>
+                        <p>
+                            We need to define a simple data model for storing the raw data.
+                            For that, we can build a <strong>CDS context</strong>:
+                        </p>
+<pre><code class="text">
+namespace spet.data;
+
+@Schema: 'SPET'
+context core {
+    entity Raw { 
+        text:        String(512) not null;
+        address:     String(128) not null;
+    };
+}
+
+</code></pre>
+                    </section>
+                    <section>
+                        <p>
+                            Now we need to fill our table with the Excel data.
+                            There are <strong>a lot</strong> of options to get data into HANA.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            For purely <strong>development</strong> purposes, you can:
+                            <ul>
+                                <li>Use the HANA Studio (Eclipse).</li>
+                                <li>Use a HDB table import script.</li>
+                                <li>Use the IMPORT SQL command.</li>
+                            </ul>
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            For <strong>productive</strong> usage, some of the options include:
+                            <ul>
+                                <li>SLT for data replication.</li>
+                                <li>Smart Data Integration / Access.</li>
+                                <li>SAP Cloud Integration.</li>
+                            </ul>
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            In the end, I used a simple HDB table import:
+                        </p>
+<pre><code class="text">
+import = [
+    {
+        cdstable  = "spet.data::core.Raw";
+        schema = "SPET";
+        file = "spet.data:tweets.csv";
+        header = false;
+        delimField = ",";
+        delimEnclosing="\"";  
+    } 
+];
+
+</code></pre>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Geocoding</h1>
+                    </section>
+                    <section>
+                        <p>
+                            Our geographical data is <strong>textual</strong>, but we would want to work with
+                            coordinates. The transformation between text and coordinates is called 
+                            <strong>geocoding</strong>.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            We could use the <strong>GEOCODING INDEX</strong> capability to automatically process
+                            the data when we insert it into our table, but it has one big drawback: we would need
+                            to split the address into components (country, etc.).
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            I used the <strong>Google Geocoding API</strong> instead, because of its increased 
+                            flexibility. With some easy JavaScript, we can process all of our data at once.
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/geocoded_data_hana.PNG"/>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Extracting sentiments</h1>
+                    </section>
+                    <section>
+                        <p>
+                            We want to see how users <strong>feel</strong> about our products.
+                        <p>
+                        </p>
+                            For this, HANA has the built-in functionality of <strong>Text Analysis</strong>,
+                            with a configuration specialized for processing customer feedback.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Again, we could use a dedicated index, the <strong>FULL TEXT INDEX</strong>,
+                            for analysing data as it is inserted.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            But we also have an JavaScript API for doing this. As we already go through
+                            all the data for geocoding, we <strong>simultaneously</strong> 
+                            extract the sentiments.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            Each sentiment has the following attributes:
+                            <ul>
+                                <li>Type: positive, negative, neutral</li>
+                                <li>Strong: yes, no</li>
+                                <li>The words forming the sentiment</li>
+                                <li>The position of the sentiment in the text</li>
+                            </ul>
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/sentiments_hana.PNG"/>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Extraction Results</h1>
+                    </section>
+                    <section>
+                        <p>
+                            You may wonder how good the extraction results are.
+                            Let's look at some examples of good and bad results.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            <strong>GOOD</strong>
+                        </p>
+                        <p>
+                            It understands emoticons:
+                        </p>
+                        <img src="./assets/results_emoticon.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            <strong>GOOD</strong>
+                        </p>
+                        <p>
+                            It found a good rating and interpreted it correctly:
+                        </p>
+                        <img src="./assets/results_stars.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            <strong>BAD</strong>
+                        </p>
+                        <p>
+                            It interpreted a sarcastic emoticon as positive:
+                        </p>
+                        <img src="./assets/results_sarcasm.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            <strong>BAD</strong>
+                        </p>
+                        <p>
+                            It doesn't understand the surrounding context:
+                        </p>
+                        <img src="./assets/results_context.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            <strong>BAD</strong>
+                        </p>
+                        <p>
+                            Several tweets with obvious sentiments are ignored:
+                        </p>
+                        <p>
+                            <img src="./assets/results_ignore_2.PNG"/><br />
+                            <img src="./assets/results_ignore_1.PNG"/><br />
+                            <img src="./assets/results_ignore_3.PNG"/>
+                        </p>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Visualization</h1>
+                    </section>
+                    <section>
+                        <p>
+                            Now that we have all our data analysed and into a decent structure, let's 
+                            <strong>visualize</strong> it.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            First we want to generate a score for each tweet, on a scale from <strong>1 to 5</strong>, 
+                            where 1 is bad and 5 is good. We compute this score from the sentiments.
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/visual_table.PNG"/>
+                    </section>
+                    <section>
+                        <img src="./assets/visual_map.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            One other interesting point to analyse is to find <strong>hotspots</strong> 
+                            where feedback (or a particular type of feedback) is coming from.
+                        </p>
+                    </section>
+                    <section>
+                        <p>
+                            To do this, we can use HANA's built-in <strong>clustering</strong> feature
+                            or we can use the Google Maps version of the same thing directly on the UI.
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/visual_clustering.PNG"/>
+                    </section>
+                    <section>
+                        <p>
+                            Another idea is to find the <strong>average score</strong> for any arbitrarily defined
+                            geographical boundary.
+                        </p>
+                        <p>
+                            For the fun of it, we will simply allow the user to <strong>draw</strong> a polygon 
+                            to define this boundary.
+                        </p>
+                    </section>
+                    <section>
+                        <img src="./assets/visual_aggregation.PNG"/>
+                    </section>
+                </section>
+				<section>
+                    <h1><strong>?</strong></h1>
+					<h3>Q&amp;A</h3>
+				</section>
+				<section>
+					<h3>Fork me on GitHub</h3>
+					<a href="https://github.com/serban-petrescu/combining-spatial-and-ta-with-hana">https://github.com/serban-petrescu/combining-spatial-and-ta-with-hana</a>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				center: true,
+				mouseWheel: true,
+				slideNumber: true,
+				transition: 'slide',
+				history: true,
+
+				// More info https://github.com/hakimel/reveal.js#dependencies
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+		</script>
+	</body>
+</html>
