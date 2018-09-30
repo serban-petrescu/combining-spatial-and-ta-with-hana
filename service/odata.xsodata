@@ -1,0 +1,24 @@
+service namespace "spet.service:odata" {
+    
+    "spet.data::core.Tweet" as "Tweets" key ("id")
+        navigates("SentimentToProcessed" as "Sentiments")
+        create forbidden
+        update forbidden
+        delete forbidden;
+        
+    "spet.data::core.Sentiment" as "Sentiments" 
+        create forbidden
+        update forbidden
+        delete forbidden;
+
+    "spet.model::CV_REGION_AGGR" as "RegionAggregations" 
+        keys generate local "key"
+        parameters via entity "RegionAggregationParameters" results property "Results";
+        
+    "spet.model::CV_REGION_POINTS" as "RegionPoints"
+        keys generate local "key"  
+        parameters via entity "RegionPointParameters" results property "Results";
+
+    association "SentimentToProcessed" with referential constraint principal "Tweets"("id") multiplicity "1"
+        dependent "Sentiments"("processedId") multiplicity "*";
+}

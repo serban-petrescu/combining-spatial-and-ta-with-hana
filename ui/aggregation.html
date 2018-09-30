@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html  style="height:100%">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Aggregation</title>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=<<API KEY HERE>>&amp;libraries=drawing"></script>
+    
+    <script id="sap-ui-bootstrap"
+        type="text/javascript"
+        src="https://openui5.hana.ondemand.com/resources/sap-ui-core.js"
+		data-sap-ui-resourceroots='{"msg.maps": "./maps"}'
+        data-sap-ui-bindingSyntax='complex'
+        data-sap-ui-theme="sap_belize"
+        data-sap-ui-libs="sap.m"></script>
+    
+    <script id="main" type="sapui5/xmlview">
+        <mvc:View height="100%"
+        	xmlns:mvc="sap.ui.core.mvc"
+        	xmlns:core="sap.ui.core"
+        	xmlns:maps="msg.maps"
+        	xmlns:layout="sap.ui.layout"
+        	xmlns="sap.m" >
+        	<Page title="Aggregation" showHeader="true" height="100%" enableScrolling="false">
+        	    <layout:FixFlex fixFirst="false">
+        	        <layout:fixContent>
+        	            <ScrollContainer width="100%" height="7em" vertical="true" horizontal="false">
+            	            <Table id="table" items="{path: 'Results', sorter: {path: 'count', descending: true}}">
+            	                <columns>
+            	                    <Column><header><Label text="Group" /></header></Column>
+            	                    <Column><header><Label text="Tweet Count" /></header></Column>
+            	                    <Column><header><Label text="Average Score" /></header></Column>
+            	                </columns>
+            	                <ColumnListItem>
+            	                    <Text text="{= ${group} ? 'Inside Region' : 'Outside Region'}" />
+            	                    <Text text="{count}" />
+            	                    <Text text="{score}" />
+            	                </ColumnListItem>
+            	            </Table>
+            	        </ScrollContainer>
+            		</layout:fixContent>
+        	        <layout:flexContent>
+            			<maps:Map latitude="0" longitude="0" zoom="2"
+            			    markers="{path: '/Tweets', templateShareable: true}" 
+            				height="100%" width="auto" id="map" drawing="true" drawPolygon="onDrawPolygon">
+            				<maps:markers>
+    				            <maps:Marker latitude="{latitude}" longitude="{longitude}" 
+    				                color="{parts: [{path: 'score'}, {path: 'group'}], formatter: '.formatColor'}"/>
+            				</maps:markers>
+            			</maps:Map>
+            		</layout:flexContent>
+            	</layout:FixFlex>
+        	</Page>
+        </mvc:View>    
+    </script>
+    
+    <script>
+        function polyToWkt(oPoly) {
+            var fnPointToWkt = function(oPoint) {
+                    return oPoint.lng() + " " + oPoint.lat();
+                },
+                fnLineToClosedWkt = function(oPath) {
+                    var aArray = oPath.getArray().map(fnPointToWkt);
+                    aArray.push(aArray[0]);
+                    return "(" + aArray.join(", ") + ")";
+                },
+                fnPolygonToWkt = function(oPoly) {
+                    return "(" + oPoly.getPaths().getArray().map(fnLineToClosedWkt).join(", ") + ")";
+                };
+            return "POLYGON" + fnPolygonToWkt(oPoly);
+        }
+    
+        sap.ui.require(["sap/ui/core/mvc/Controller", "sap/m/MessageToast", "sap/ui/model/json/JSONModel", "sap/ui/Device",
+        "sap/ui/model/odata/v2/ODataModel", "msg/maps/Marker"], 
+            function(Controller, MessageToast, JSONModel, Device, ODataModel, Marker){
+                
+                /**
+                 * Annonymous controller for the view.
+                 * @class
+                 */
+                var fnController = Controller.extend("AnnonymousController", {
+                    onInit: function() {
+                        this.createDataModel();
+                        this.createDeviceModel();
+                        this.setContentDensityClass();
+                    },
+                    
+                    createDataModel: function() {
+                        this.getView().setModel(new ODataModel("../service/odata.xsodata"));
+                    },
+                    
+                    formatColor: function(iScore, iGroup) {
+                        if (iGroup || iGroup === undefined) {
+                            return ["#FF0000", "#FF7F00", "#FFFF00", "#7FFF00", "#00FF00"][iScore - 1]; 
+                        } else {
+                            return ["#FFD8D8", "#FFEBD8", "#FFFFD8", "#EBFFD8", "#D8FFD8"][iScore - 1]; 
+                        }
+                    },
+                    
+                    createDeviceModel: function() {
+                    	var oModel = new JSONModel(Device);
+                    	oModel.setDefaultBindingMode("OneWay");
+                    	Device.resize.attachHandler(function() {
+                    	    oModel.setData(Device);
+                    	});
+                    	this.getView().setModel(oModel, "device");
+                    },
+            
+            		setContentDensityClass: function() {
+            			this.getView().addStyleClass(Device.support.touch ? "sapUiSizeCozy" : "sapUiSizeCompact");
+            		},
+            		
+            		onChangeRadius: function(oEvent) {
+            		    this._radius = parseFloat(oEvent.getSource().getValue()) * 1000;
+            		    this.updateBindings();
+            		},
+            		
+            		onPressMarker: function(oEvent) {
+            		    this._lat = oEvent.getSource().getLatitude();
+            		    this._lng = oEvent.getSource().getLongitude();
+            		    this.updateBindings();
+            		},
+            		
+            		onDrawPolygon: function(oEvent) {
+            		    var oModel = this.getView().getModel(),
+            		        sPoly = polyToWkt(oEvent.getParameter("polygon")),
+            		        oKey = {IV_POLYGON: sPoly};
+        		        this.byId("table").bindElement({
+        		            path: oModel.createKey("/RegionAggregationParameters", oKey)
+        		        });
+        		        this.byId("map").bindAggregation("markers",{
+        		            path: oModel.createKey("/RegionPointParameters", oKey) + "/Results",
+        		            template: new Marker({
+        		                latitude: "{latitude}",
+        		                longitude: "{longitude}",
+        		                color: {parts: [{path: 'score'}, {path: 'group'}], formatter: this.formatColor},
+        		                press: this.onPressMarker.bind(this)
+        		            })
+        		        });
+            		}
+                });
+                
+                sap.ui.xmlview("main", {
+                    viewContent:    jQuery("#main").html(),
+                    controller:     new fnController()
+                }).placeAt("uiArea");
+            }
+        );
+    </script>
+
+</head>
+<body class="sapUiBody" style="height:100%">
+    <div id="uiArea"  style="height:100%"></div>
+</body>
+</html>

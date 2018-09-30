@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Calculation:scenario xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:Calculation="http://www.sap.com/ndb/BiModelCalculation.ecore" id="CV_REGION_POINTS" applyPrivilegeType="ANALYTIC_PRIVILEGE" dataCategory="DEFAULT" dimensionType="STANDARD" schemaVersion="2.3" defaultClient="$$client$$" visibility="internal" calculationScenarioType="SCRIPT_BASED" scriptParametersCaseSensitive="true" enforceSqlExecution="false">
+<descriptions defaultDescription="CV_RADIUS_AGGR"/>
+<localVariables>
+  <variable id="IV_POLYGON" parameter="true">
+    <variableProperties datatype="VARCHAR" length="5000">
+      <valueDomain type="empty"/>
+      <selection multiLine="false" type="SingleValue"/>
+    </variableProperties>
+  </variable>
+</localVariables>
+<variableMappings/>
+<dataSources/>
+<calculationViews>
+  <calculationView xsi:type="Calculation:SqlScriptView" id="Script_View">
+    <viewAttributes>
+      <viewAttribute id="id" datatype="INTEGER"/>
+    
+      <viewAttribute id="latitude" datatype="DOUBLE"/>
+      <viewAttribute id="longitude" datatype="DOUBLE"/>
+      <viewAttribute id="group" datatype="INTEGER"/>
+    
+      <viewAttribute id="score" datatype="DECIMAL" length="20" scale="2"/>
+    </viewAttributes>
+    <calculatedViewAttributes/>
+    <localVariable>#IV_POLYGON</localVariable>
+    <definition>/********* Begin Procedure Script ************/ 
+BEGIN 
+    
+    var_out = SELECT &quot;id&quot;, &quot;latitude&quot;, &quot;longitude&quot;,
+        NEW ST_POINT('POINT(' || &quot;longitude&quot; || ' '  ||  &quot;latitude&quot; || ')', 4326)
+            .ST_CoveredBy(NEW ST_POLYGON(:iv_polygon, 4326)) AS &quot;group&quot;, &quot;score&quot;
+        FROM &quot;SPET&quot;.&quot;spet.data::core.Tweet&quot;;
+
+END /********* End Procedure Script ************/</definition>
+  </calculationView>
+</calculationViews>
+<logicalModel id="Script_View">
+  <attributes>
+    <attribute id="id" order="1" semanticType="empty">
+      <descriptions defaultDescription="COL"/>
+      <keyMapping columnObjectName="Script_View" columnName="id"/>
+    </attribute>
+    <attribute id="latitude" order="2" semanticType="empty">
+      <keyMapping columnObjectName="Script_View" columnName="latitude"/>
+    </attribute>
+    <attribute id="longitude" order="3" semanticType="empty">
+      <keyMapping columnObjectName="Script_View" columnName="longitude"/>
+    </attribute>
+    <attribute id="group" order="4" semanticType="empty">
+      <keyMapping columnObjectName="Script_View" columnName="group"/>
+    </attribute>
+  
+    <attribute id="score" order="5">
+      <keyMapping columnObjectName="Script_View" columnName="score"/>
+    </attribute>
+  </attributes>
+  <calculatedAttributes/>
+  <baseMeasures/>
+  <calculatedMeasures/>
+  <restrictedMeasures/></logicalModel>
+<layout>
+  <shapes>
+    <shape expanded="true" modelObjectName="Output" modelObjectNameSpace="MeasureGroup">
+      <upperLeftCorner x="40" y="85"/>
+    </shape>
+  </shapes>
+</layout>
+</Calculation:scenario>

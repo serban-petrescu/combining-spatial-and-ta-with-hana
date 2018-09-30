@@ -1,0 +1,56 @@
+namespace spet.data;
+
+@Schema: 'SPET'
+context core {
+    entity Raw { 
+        text:        String(512) not null;
+        address:     String(128) not null;
+    };
+    
+    entity Processed { 
+        key id:      Integer not null;
+        text:        String(512) not null;
+        address:     String(128) not null;
+        location:    hana.ST_POINT(4326);
+    };
+    
+    view Tweet as select from Processed left join TotalScore on Processed.id = TotalScore.processedId { 
+        id,
+        text,
+        address,
+        location.ST_Y() as latitude,
+        location.ST_X() as longitude,
+        CASE
+            WHEN total IS NULL THEN 3
+            WHEN total >= 4 THEN 5
+            WHEN total <= -4 THEN 1
+            ELSE FLOOR(total / 2) + 3
+        END as score
+    };
+    
+    entity Sentiment {
+        key id:      Integer not null;
+	    startIndex:  Integer;
+	    endIndex:    Integer;
+	    type:        String(32);
+	    strong:      hana.TINYINT;
+	    text:        String(64);
+	    processedId: Integer not null;
+    }
+    
+    view Score as select from Sentiment {
+        processedId,
+        CASE 
+            WHEN type = 'NEGATIVE' AND strong = 1 THEN -2
+            WHEN type = 'NEGATIVE' AND strong = 0 THEN -1
+            WHEN type = 'POSITIVE' AND strong = 0 THEN 1
+            WHEN type = 'POSITIVE' AND strong = 1 THEN 2
+            ELSE 0
+        END as score
+    };
+    
+    view TotalScore as select from Score {
+        processedId,
+        SUM(score) as total
+    } group by processedId;
+}

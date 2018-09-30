@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html  style="height:100%">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>All Tweets</title>
+    
+    <script id="sap-ui-bootstrap"
+        type="text/javascript"
+        src="https://openui5.hana.ondemand.com/resources/sap-ui-core.js"
+        data-sap-ui-bindingSyntax='complex'
+        data-sap-ui-theme="sap_belize"
+        data-sap-ui-libs="sap.m"></script>
+    
+    <style>
+        .is-positive {
+            color: green;
+        }
+        
+        .is-negative {
+            color: red;
+        }
+        
+        .is-strong {
+            font-weight: bold;
+        }
+    </style>
+    
+    <script id="main" type="sapui5/xmlview">
+        <mvc:View height="100%"
+        	xmlns:mvc="sap.ui.core.mvc"
+        	xmlns:core="sap.ui.core"
+        	xmlns:maps="msg.maps"
+        	xmlns="sap.m" >
+        	<Page title="All Tweets" showHeader="true" height="100%">
+    			<Table items="{path: '/Tweets', parameters: {expand: 'Sentiments'}, sorter: {path: 'score', descending: true}}">
+    			    <columns>
+    			        <Column width="4em"><header><Label text="Score"/></header></Column>
+    			        <Column><header><Label text="Tweet"/></header></Column>
+    			        <Column><header><Label text="Address"/></header></Column>
+    			        <Column><header><Label text="Coordinates"/></header></Column>
+    			    </columns>
+    			    <ColumnListItem>
+    			        <Text text="{score}" />
+    			        <FormattedText htmlText="{parts: [{path: 'text'}, {path: 'Sentiments'}], formatter: '.formatText'}" />
+    			        <Text text="{address}" />
+    			        <Text text="{latitude}, {longitude}" />
+    			    </ColumnListItem>
+    			</Table>
+        	</Page>
+        </mvc:View>    
+    </script>
+    
+    <script>
+        sap.ui.require(["sap/ui/core/mvc/Controller", "sap/m/MessageToast", "sap/ui/model/odata/v2/ODataModel",
+            "sap/ui/model/json/JSONModel", "sap/ui/Device", "jquery.sap.global"], 
+            function(Controller, MessageToast, ODataModel, JSONModel, Device, jQuery){
+                
+                /**
+                 * Annonymous controller for the view.
+                 * @class
+                 */
+                var fnController = Controller.extend("AnnonymousController", {
+                    
+                    onInit: function() {
+                        this.createODataModel();
+                        this.createDeviceModel();
+                        this.setContentDensityClass();
+                    },
+                    
+                    createODataModel: function() {
+                        this.getView().setModel(new ODataModel("../service/odata.xsodata"));
+                    },
+                    
+                    createDeviceModel: function() {
+                    	var oModel = new JSONModel(Device);
+                    	oModel.setDefaultBindingMode("OneWay");
+                    	Device.resize.attachHandler(function() {
+                    	    oModel.setData(Device);
+                    	});
+                    	this.getView().setModel(oModel, "device");
+                    },
+                    
+                    formatText: function(text, sentiments) {
+                        var oModel = this.getView().getModel();
+                        var sorted = (sentiments || [])
+                            .map(function(s) {return oModel.getProperty("/" + s)})
+                            .sort(function(a, b) {return a.startIndex - b.startIndex});
+                        var current = 0;
+                        var result = "";
+                        for (var i = 0; i < sorted.length; ++i) {
+                            if (sorted[i].startIndex > current) {
+                                result += jQuery.sap.encodeHTML(text.substring(current, sorted[i].startIndex));
+                            }
+                            result += this.formatSentiment(text.substring(sorted[i].startIndex, sorted[i].endIndex), sorted[i]);
+                            current = sorted[i].endIndex;
+                        }
+                        if (current < text.length) {
+                            result += jQuery.sap.encodeHTML(text.substring(current));
+                        }
+                        return result;
+                    },
+                    
+                    formatSentiment: function(text, sentiment) {
+                        var result = '<span class="feedback';
+                        if (sentiment.strong) {
+                            result += " is-strong";
+                        }
+                        if (sentiment.type === "NEGATIVE") {
+                            result += " is-negative";
+                        } else if (sentiment.type === "POSITIVE") {
+                            result += " is-positive";
+                        }
+                        result += '">' + jQuery.sap.encodeHTML(text) + "</span>";
+                        return result;
+                    },
+            
+            		setContentDensityClass: function() {
+            			this.getView().addStyleClass(Device.support.touch ? "sapUiSizeCozy" : "sapUiSizeCompact");
+            		}
+                });
+                
+                sap.ui.xmlview("main", {
+                    viewContent:    jQuery("#main").html(),
+                    controller:     new fnController()
+                }).placeAt("uiArea");
+            }
+        );
+    </script>
+
+</head>
+<body class="sapUiBody" style="height:100%">
+    <div id="uiArea"  style="height:100%"></div>
+</body>
+</html>

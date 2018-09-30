@@ -1,0 +1,10 @@
+import = [
+    {
+        cdstable  = "spet.data::core.Raw";
+        schema = "SPET";
+        file = "spet.data:tweets.csv";
+        header = true;
+        delimField = ",";
+        delimEnclosing="\"";  
+    } 
+];

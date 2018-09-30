@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html  style="height:100%">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Clustering</title>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=<<API KEY HERE>>"></script>
+    
+    <script id="sap-ui-bootstrap"
+        type="text/javascript"
+        src="https://openui5.hana.ondemand.com/resources/sap-ui-core.js"
+		data-sap-ui-resourceroots='{"msg.maps": "./maps"}'
+        data-sap-ui-bindingSyntax='complex'
+        data-sap-ui-theme="sap_belize"
+        data-sap-ui-libs="sap.m"></script>
+    
+    <script id="main" type="sapui5/xmlview">
+        <mvc:View height="100%"
+        	xmlns:mvc="sap.ui.core.mvc"
+        	xmlns:core="sap.ui.core"
+        	xmlns:maps="msg.maps"
+        	xmlns="sap.m" >
+        	<Page title="Clustering" showHeader="true" height="100%" enableScrolling="false">
+    			<maps:Map latitude="0" longitude="0" zoom="2" markers="{path: '/Tweets', parameters: {expand: 'Sentiments'}}" 
+    				id="map" height="100%" width="auto" >
+    				<maps:markers>
+    				    <maps:Marker latitude="{latitude}" longitude="{longitude}" color="{path: 'score', formatter: '.formatColor'}" press="onPressMarker" />
+    				</maps:markers>
+    			</maps:Map>
+        	</Page>
+        </mvc:View>    
+    </script>
+    
+    <script>
+        sap.ui.require(["sap/ui/core/mvc/Controller", "sap/m/MessageToast", "sap/ui/model/odata/v2/ODataModel",
+            "sap/ui/model/json/JSONModel", "sap/ui/Device"], 
+            function(Controller, MessageToast, ODataModel, JSONModel, Device){
+                
+                /**
+                 * Annonymous controller for the view.
+                 * @class
+                 */
+                var fnController = Controller.extend("AnnonymousController", {
+                    
+                    onInit: function() {
+                        var oMap = this.byId("map");
+                        this.createODataModel();
+                        this.createDeviceModel();
+                        this.setContentDensityClass();
+                        
+                        //Performs clustering on the UI when the data is received.
+                        oMap.getBinding("markers").attachEventOnce("dataReceived", function() {
+                            oMap.doClustering();
+                        })
+                    },
+                    
+                    createODataModel: function() {
+                        this.getView().setModel(new ODataModel("../service/odata.xsodata"));
+                    },
+                    
+                    formatColor: function(iScore) {
+                        return ["#FF0000", "#FF7F00", "#FFFF00", "#7FFF00", "#00FF00"][iScore - 1]; 
+                    },
+                    
+                    createDeviceModel: function() {
+                    	var oModel = new JSONModel(Device);
+                    	oModel.setDefaultBindingMode("OneWay");
+                    	Device.resize.attachHandler(function() {
+                    	    oModel.setData(Device);
+                    	});
+                    	this.getView().setModel(oModel, "device");
+                    },
+            
+            		setContentDensityClass: function() {
+            			this.getView().addStyleClass(Device.support.touch ? "sapUiSizeCozy" : "sapUiSizeCompact");
+            		}
+                });
+                
+                sap.ui.xmlview("main", {
+                    viewContent:    jQuery("#main").html(),
+                    controller:     new fnController()
+                }).placeAt("uiArea");
+            }
+        );
+    </script>
+
+</head>
+<body class="sapUiBody" style="height:100%">
+    <div id="uiArea"  style="height:100%"></div>
+</body>
+</html>

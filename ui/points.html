@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html  style="height:100%">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>All Tweets</title>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=<<API KEY HERE>>"></script>
+    
+    <script id="sap-ui-bootstrap"
+        type="text/javascript"
+        src="https://openui5.hana.ondemand.com/resources/sap-ui-core.js"
+		data-sap-ui-resourceroots='{"msg.maps": "./maps"}'
+        data-sap-ui-bindingSyntax='complex'
+        data-sap-ui-theme="sap_belize"
+        data-sap-ui-libs="sap.m"></script>
+    
+    <style>
+        .is-positive {
+            color: green;
+        }
+        
+        .is-negative {
+            color: red;
+        }
+        
+        .is-strong {
+            font-weight: bold;
+        }
+    </style>
+    
+    <script id="main" type="sapui5/xmlview">
+        <mvc:View height="100%"
+        	xmlns:mvc="sap.ui.core.mvc"
+        	xmlns:core="sap.ui.core"
+        	xmlns:maps="msg.maps"
+        	xmlns="sap.m" >
+        	<Page title="All Points" showHeader="true" height="100%" enableScrolling="false">
+    			<maps:Map latitude="0" longitude="0" zoom="2" markers="{path: '/Tweets', parameters: {expand: 'Sentiments'}}" 
+    				height="100%" width="auto" >
+    				<maps:markers>
+    				    <maps:Marker latitude="{latitude}" longitude="{longitude}" color="{path: 'score', formatter: '.formatColor'}" press="onPressMarker" />
+    				</maps:markers>
+    			</maps:Map>
+    			<dependents>
+    			    <maps:InfoWindow id="infoWindow" content="{parts: [{path: 'text'}, {path: 'Sentiments'}], formatter: '.formatText'}" />
+    			</dependents>
+        	</Page>
+        </mvc:View>    
+    </script>
+    
+    <script>
+        sap.ui.require(["sap/ui/core/mvc/Controller", "sap/m/MessageToast", "sap/ui/model/odata/v2/ODataModel",
+            "sap/ui/model/json/JSONModel", "sap/ui/Device"], 
+            function(Controller, MessageToast, ODataModel, JSONModel, Device){
+                
+                /**
+                 * Annonymous controller for the view.
+                 * @class
+                 */
+                var fnController = Controller.extend("AnnonymousController", {
+                    
+                    onInit: function() {
+                        this.createODataModel();
+                        this.createDeviceModel();
+                        this.setContentDensityClass();
+                    },
+                    
+                    createODataModel: function() {
+                        this.getView().setModel(new ODataModel("../service/odata.xsodata"));
+                    },
+                    
+                    createDeviceModel: function() {
+                    	var oModel = new JSONModel(Device);
+                    	oModel.setDefaultBindingMode("OneWay");
+                    	Device.resize.attachHandler(function() {
+                    	    oModel.setData(Device);
+                    	});
+                    	this.getView().setModel(oModel, "device");
+                    },
+                    
+                    formatColor: function(iScore) {
+                        return ["#FF0000", "#FF7F00", "#FFFF00", "#7FFF00", "#00FF00"][iScore - 1]; 
+                    },
+                    
+                    formatText: function(text, sentiments) {
+                        if (!text) {
+                            return "";
+                        }
+                        var oModel = this.getView().getModel();
+                        var sorted = (sentiments || [])
+                            .map(function(s) {return oModel.getProperty("/" + s)})
+                            .sort(function(a, b) {return a.startIndex - b.startIndex});
+                        var current = 0;
+                        var result = "";
+                        for (var i = 0; i < sorted.length; ++i) {
+                            if (sorted[i].startIndex > current) {
+                                result += jQuery.sap.encodeHTML(text.substring(current, sorted[i].startIndex));
+                            }
+                            result += this.formatSentiment(text.substring(sorted[i].startIndex, sorted[i].endIndex), sorted[i]);
+                            current = sorted[i].endIndex;
+                        }
+                        if (current < text.length) {
+                            result += jQuery.sap.encodeHTML(text.substring(current));
+                        }
+                        return result;
+                    },
+                    
+                    formatSentiment: function(text, sentiment) {
+                        var result = '<span class="feedback';
+                        if (sentiment.strong) {
+                            result += " is-strong";
+                        }
+                        if (sentiment.type === "NEGATIVE") {
+                            result += " is-negative";
+                        } else if (sentiment.type === "POSITIVE") {
+                            result += " is-positive";
+                        }
+                        result += '">' + jQuery.sap.encodeHTML(text) + "</span>";
+                        return result;
+                    },
+                    
+                    onPressMarker: function(oEvent) {
+                        var oInfo = this.byId("infoWindow");
+                        oInfo.bindElement({
+                            path: oEvent.getSource().getBindingContext().getPath()
+                        });
+                        oInfo.openByMarker(oEvent.getSource());
+                    },
+            
+            		setContentDensityClass: function() {
+            			this.getView().addStyleClass(Device.support.touch ? "sapUiSizeCozy" : "sapUiSizeCompact");
+            		}
+                });
+                
+                sap.ui.xmlview("main", {
+                    viewContent:    jQuery("#main").html(),
+                    controller:     new fnController()
+                }).placeAt("uiArea");
+            }
+        );
+    </script>
+
+</head>
+<body class="sapUiBody" style="height:100%">
+    <div id="uiArea"  style="height:100%"></div>
+</body>
+</html>
